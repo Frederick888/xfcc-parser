@@ -1,3 +1,13 @@
+<a name="v0.1.1"></a>
+## v0.1.1 (2023-03-23)
+
+
+#### Bug Fixes
+
+*   Remove manifest keyword that was too long ([0be6ecde](https://github.com/Frederick888/xfcc-parser/commit/0be6ecdee15a68763fa5dc6bad6775599b6f819a))
+
+
+
 <a name="v0.1.0"></a>
 ## v0.1.0 (2023-03-23)
 
