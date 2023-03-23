@@ -6,7 +6,7 @@ edition = "2021"
 description = "Envoy x-forwarded-client-cert (XFCC) header parser"
 repository = "https://github.com/Frederick888/xfcc-parser/"
 license = "BSD-3-Clause"
-keywords = ["envoy", "x-forwarded-client-cert", "xfcc", "http"]
+keywords = ["envoy", "xfcc", "http"]
 categories = ["parser-implementations", "web-programming"]
 
 [dependencies]
