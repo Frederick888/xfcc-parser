@@ -1,0 +1,13 @@
+[package]
+name = "xfcc-parser"
+version = "0.1.0"
+authors = ["Frederick Zhang <frederick888@tsundere.moe>"]
+edition = "2021"
+description = "Envoy x-forwarded-client-cert (XFCC) header parser"
+license = "BSD-3-Clause"
+keywords = ["envoy", "x-forwarded-client-cert", "xfcc", "http"]
+categories = ["parser-implementations", "web-programming"]
+
+[dependencies]
+nom = "7.1.3"
+strum = { version = "0.24.1", features = ["derive"] }
