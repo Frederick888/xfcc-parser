@@ -493,7 +493,7 @@ mod tests {
     fn basic_element_list_test() {
         let input = br#"By=http://frontend.lyft.com;Hash=468ed33be74eee6556d90c0149c1309e9ba61d6425303443c0748a02dd8de688;Subject="/C=US/ST=CA/L=San Francisco/OU=Lyft/CN=Test Client";URI=http://testclient.lyft.com,By=http://example.com;By=http://instance.com"#;
         let certificates = element_list(input).unwrap();
-        assert_eq!(2, certificates.len());
+        assert_eq!(certificates.len(), 2);
         assert_eq!(
             certificates[0],
             Element {
