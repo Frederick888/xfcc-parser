@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+  push:
+    branches:
+      - master
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        rust_toolchain: [stable]
+        experimental: [false]
+        include:
+          - rust_toolchain: nightly
+            experimental: true
+    steps:
+      - name: Cancel Previous Runs
+        if: contains(matrix.os, 'ubuntu')
+        uses: styfle/cancel-workflow-action@0.11.0
+        with:
+          access_token: ${{ github.token }}
+
+      - uses: actions/checkout@v3
+
+      - name: Install Rust Toolchain
+        id: rust_toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust_toolchain }}
+          components: rustfmt, clippy
+      - name: Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: test-${{ runner.os }}-rustc-${{ steps.rust_toolchain.outputs.cachekey }}-git-${{ github.sha }}
+          restore-keys: |
+            test-${{ runner.os }}-rustc-${{ steps.rust_toolchain.outputs.cachekey }}-
+            test-${{ runner.os }}-
+
+      - name: rustfmt
+        shell: bash
+        run: |
+          cargo fmt -- --check
+      - name: Clippy
+        shell: bash
+        run: |
+          cargo clippy --tests --examples --benches -- -D warnings
+
+      - name: Test
+        shell: bash
+        run: |
+          cargo test
+
+  doc:
+    name: Doc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust Toolchain
+        id: rust_toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: doc-${{ runner.os }}-rustc-${{ steps.rust_toolchain.outputs.cachekey }}-git-${{ github.sha }}
+          restore-keys: |
+            doc-${{ runner.os }}-rustc-${{ steps.rust_toolchain.outputs.cachekey }}-
+            doc-${{ runner.os }}-
+
+      - name: Render doc
+        shell: bash
+        run: |
+          cargo doc
+
+      - name: Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: doc
+          retention-days: 60
+          path: |
+            target/doc
