@@ -66,6 +66,9 @@ impl<'a> TryFrom<ElementRaw<'a>> for Element<'a> {
     fn try_from(element_raw: ElementRaw<'a>) -> Result<Self, Self::Error> {
         let mut element = Self::default();
         for (key, value) in element_raw {
+            if value.is_empty() {
+                continue;
+            }
             macro_rules! error_if_duplicate {
                 ($key_type:expr, $key_field:ident) => {
                     if element.$key_field.is_some() {
@@ -159,15 +162,7 @@ fn pair(s: &[u8]) -> IResult<&[u8], (PairKey, Cow<str>)> {
 }
 
 fn element(s: &[u8]) -> IResult<&[u8], ElementRaw> {
-    separated_list1(char(';'), pair)(s).map(|(s, key_values)| {
-        (
-            s,
-            key_values
-                .into_iter()
-                .filter(|(_, value)| !value.is_empty())
-                .collect(),
-        )
-    })
+    separated_list1(char(';'), pair)(s)
 }
 
 /// Parses an XFCC header to a list of raw XFCC elements, each consists of a list of key-value pairs
@@ -409,6 +404,7 @@ mod tests {
             Ok((
                 &[][..],
                 (vec![
+                    (PairKey::By, Cow::from("")),
                     (PairKey::By, Cow::from("http://frontend.lyft.com")),
                     (
                         PairKey::Hash,
@@ -470,6 +466,7 @@ mod tests {
                             Cow::from("-----BEGIN%20CERTIFICATE-----%0cert%0A-----END%20CERTIFICATE-----%0A")
                         ),
                         (PairKey::Subject, Cow::from("CN=hello,OU=hello,O=Acme, Inc.")),
+                        (PairKey::Uri, Cow::from("")),
                         (PairKey::Dns, Cow::from("hello.west.example.com")),
                         (PairKey::Dns, Cow::from("hello.east.example.com"))
                     ],
@@ -479,6 +476,7 @@ mod tests {
                             Cow::from("spiffe://mesh.example.com/ns/hellons/sa/hellosa")
                         ),
                         (PairKey::Hash, Cow::from("again")),
+                        (PairKey::Subject, Cow::from("")),
                         (
                             PairKey::Uri,
                             Cow::from("spiffe://mesh.example.com/ns/otherns/sa/othersa")
@@ -493,7 +491,7 @@ mod tests {
     fn basic_element_list_test() {
         let input = br#"By=http://frontend.lyft.com;Hash=468ed33be74eee6556d90c0149c1309e9ba61d6425303443c0748a02dd8de688;Subject="/C=US/ST=CA/L=San Francisco/OU=Lyft/CN=Test Client";URI=http://testclient.lyft.com,By=http://example.com;By=http://instance.com"#;
         let certificates = element_list(input).unwrap();
-        assert_eq!(2, certificates.len());
+        assert_eq!(certificates.len(), 2);
         assert_eq!(
             certificates[0],
             Element {
@@ -517,6 +515,25 @@ mod tests {
                     Cow::from("http://example.com"),
                     Cow::from("http://instance.com")
                 ],
+                hash: None,
+                cert: None,
+                chain: None,
+                subject: None,
+                uri: vec![],
+                dns: vec![],
+            }
+        );
+    }
+
+    #[test]
+    fn empty_subject_element_list_test() {
+        let input = br#"By=http://example.com;Subject="""#;
+        let certificates = element_list(input).unwrap();
+        assert_eq!(certificates.len(), 1);
+        assert_eq!(
+            certificates[0],
+            Element {
+                by: vec![Cow::from("http://example.com"),],
                 hash: None,
                 cert: None,
                 chain: None,
