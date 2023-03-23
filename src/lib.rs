@@ -2,7 +2,7 @@ pub mod error;
 
 use std::{
     borrow::{Borrow, Cow},
-    str::FromStr,
+    str::{FromStr, Utf8Error},
     string::FromUtf8Error,
 };
 
@@ -92,11 +92,12 @@ impl<'a> TryFrom<ElementRaw<'a>> for Element<'a> {
     }
 }
 
-fn to_cow_str<T>(s: T) -> Result<Cow<'static, str>, FromUtf8Error>
-where
-    T: Into<Vec<u8>>,
-{
-    String::from_utf8(s.into()).map(Cow::from)
+fn to_cow_str(s: &[u8]) -> Result<Cow<str>, Utf8Error> {
+    std::str::from_utf8(s).map(Cow::from)
+}
+
+fn to_owned_cow_str(s: Vec<u8>) -> Result<Cow<'static, str>, FromUtf8Error> {
+    String::from_utf8(s).map(Cow::from)
 }
 
 fn empty_quoted_value(s: &[u8]) -> IResult<&[u8], Cow<str>> {
@@ -110,7 +111,7 @@ fn escaped_value(s: &[u8]) -> IResult<&[u8], Cow<str>> {
             SLASH.as_char(),
             take(1u8),
         ),
-        to_cow_str,
+        to_owned_cow_str,
     )(s)
 }
 
@@ -303,15 +304,14 @@ mod tests {
     #[test]
     fn basic_unquoted_value_test() {
         let input = b"hello! world!;";
-        assert_eq!(
-            unquoted_value(input),
-            Ok((&[SEMICOLON][..], Cow::from("hello! world!")))
-        );
+        let parsed = unquoted_value(input).unwrap();
+        assert_eq!(parsed, (&[SEMICOLON][..], Cow::from("hello! world!")));
+        assert!(matches!(parsed.1, Cow::Borrowed(_)));
+
         let input = b"hello! world!";
-        assert_eq!(
-            unquoted_value(input),
-            Ok((&[][..], Cow::from("hello! world!")))
-        );
+        let parsed = unquoted_value(input).unwrap();
+        assert_eq!(parsed, (&[][..], Cow::from("hello! world!")));
+        assert!(matches!(parsed.1, Cow::Borrowed(_)));
     }
 
     #[test]
@@ -344,31 +344,39 @@ mod tests {
     #[test]
     fn basic_pair_test() {
         let input = br#"Chain=hello! world!;"#;
+        let parsed = pair(input).unwrap();
         assert_eq!(
-            pair(input),
-            Ok((&b";"[..], (PairKey::Chain, Cow::from("hello! world!"))))
+            parsed,
+            (&b";"[..], (PairKey::Chain, Cow::from("hello! world!")))
         );
+        assert!(matches!(parsed.1 .1, Cow::Borrowed(_)));
 
         let input = br#"Chain=hello! world!"#;
+        let parsed = pair(input).unwrap();
         assert_eq!(
-            pair(input),
-            Ok((&[][..], (PairKey::Chain, Cow::from("hello! world!"))))
+            parsed,
+            (&[][..], (PairKey::Chain, Cow::from("hello! world!")))
         );
+        assert!(matches!(parsed.1 .1, Cow::Borrowed(_)));
     }
 
     #[test]
     fn quoted_value_pair_test() {
         let input = br#"Chain="hello! world!";"#;
+        let parsed = pair(input).unwrap();
         assert_eq!(
-            pair(input),
-            Ok((&b";"[..], (PairKey::Chain, Cow::from("hello! world!"))))
+            parsed,
+            (&b";"[..], (PairKey::Chain, Cow::from("hello! world!")))
         );
+        assert!(matches!(parsed.1 .1, Cow::Owned(_)));
 
         let input = br#"Chain="hello! world!""#;
+        let parsed = pair(input).unwrap();
         assert_eq!(
-            pair(input),
-            Ok((&[][..], (PairKey::Chain, Cow::from("hello! world!"))))
+            parsed,
+            (&[][..], (PairKey::Chain, Cow::from("hello! world!")))
         );
+        assert!(matches!(parsed.1 .1, Cow::Owned(_)));
     }
 
     #[test]
