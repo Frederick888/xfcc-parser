@@ -1,16 +1,23 @@
 name: Pull request history
 
 on:
-  pull_request:
+  pull_request_target:
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   gh-ph:
     name: Add commit history to pull request description
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 100
+      - run: |
+          git remote set-branches origin '*'
+          git fetch --depth 100
       - uses: Frederick888/gh-ph@v1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

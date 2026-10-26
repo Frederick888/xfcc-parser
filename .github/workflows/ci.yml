@@ -29,11 +29,11 @@ jobs:
     steps:
       - name: Cancel Previous Runs
         if: contains(matrix.os, 'ubuntu')
-        uses: styfle/cancel-workflow-action@0.11.0
+        uses: styfle/cancel-workflow-action@0.13.1
         with:
           access_token: ${{ github.token }}
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
 
       - name: Install Rust Toolchain
         id: rust_toolchain
@@ -42,7 +42,7 @@ jobs:
           toolchain: ${{ matrix.rust_toolchain }}
           components: rustfmt, clippy
       - name: Cache
-        uses: actions/cache@v3
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -71,7 +71,7 @@ jobs:
     name: Doc
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
 
       - name: Install Rust Toolchain
         id: rust_toolchain
@@ -79,7 +79,7 @@ jobs:
         with:
           toolchain: stable
       - name: Cache
-        uses: actions/cache@v3
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -96,7 +96,7 @@ jobs:
           cargo doc
 
       - name: Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v7
         with:
           name: doc
           retention-days: 60
