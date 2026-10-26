@@ -92,7 +92,7 @@ impl<'a> TryFrom<ElementRaw<'a>> for Element<'a> {
     }
 }
 
-fn to_cow_str(s: &[u8]) -> Result<Cow<str>, Utf8Error> {
+fn to_cow_str(s: &[u8]) -> Result<Cow<'_, str>, Utf8Error> {
     std::str::from_utf8(s).map(Cow::from)
 }
 
@@ -100,11 +100,11 @@ fn to_owned_cow_str(s: Vec<u8>) -> Result<Cow<'static, str>, FromUtf8Error> {
     String::from_utf8(s).map(Cow::from)
 }
 
-fn empty_quoted_value(s: &[u8]) -> IResult<&[u8], Cow<str>> {
+fn empty_quoted_value(s: &[u8]) -> IResult<&[u8], Cow<'_, str>> {
     map(value("", tag([DOUBLE_QUOTE, DOUBLE_QUOTE])), Cow::from)(s)
 }
 
-fn escaped_value(s: &[u8]) -> IResult<&[u8], Cow<str>> {
+fn escaped_value(s: &[u8]) -> IResult<&[u8], Cow<'_, str>> {
     map_res(
         escaped_transform(
             is_not(&[DOUBLE_QUOTE, SLASH][..]),
@@ -115,7 +115,7 @@ fn escaped_value(s: &[u8]) -> IResult<&[u8], Cow<str>> {
     )(s)
 }
 
-fn quoted_value(s: &[u8]) -> IResult<&[u8], Cow<str>> {
+fn quoted_value(s: &[u8]) -> IResult<&[u8], Cow<'_, str>> {
     alt((
         empty_quoted_value,
         delimited(
@@ -126,7 +126,7 @@ fn quoted_value(s: &[u8]) -> IResult<&[u8], Cow<str>> {
     ))(s)
 }
 
-fn unquoted_value(s: &[u8]) -> IResult<&[u8], Cow<str>> {
+fn unquoted_value(s: &[u8]) -> IResult<&[u8], Cow<'_, str>> {
     map_res(
         alt((
             take_till(|c| c == COMMA || c == SEMICOLON || c == EQUAL),
@@ -156,13 +156,13 @@ fn pair_key(s: &[u8]) -> IResult<&[u8], PairKey> {
     )(s)
 }
 
-fn pair(s: &[u8]) -> IResult<&[u8], (PairKey, Cow<str>)> {
+fn pair(s: &[u8]) -> IResult<&[u8], (PairKey, Cow<'_, str>)> {
     let (s, (key, _, value)) =
         tuple((pair_key, char('='), alt((quoted_value, unquoted_value))))(s)?;
     Ok((s, (key, value)))
 }
 
-fn element(s: &[u8]) -> IResult<&[u8], ElementRaw> {
+fn element(s: &[u8]) -> IResult<&[u8], ElementRaw<'_>> {
     separated_list1(char(';'), pair)(s)
 }
 
@@ -188,7 +188,7 @@ fn element(s: &[u8]) -> IResult<&[u8], ElementRaw> {
 ///     (PairKey::Uri, Cow::from("http://testclient.lyft.com")),
 /// ]);
 /// ```
-pub fn element_raw_list(s: &[u8]) -> IResult<&[u8], Vec<ElementRaw>> {
+pub fn element_raw_list(s: &[u8]) -> IResult<&[u8], Vec<ElementRaw<'_>>> {
     separated_list0(char(','), element)(s)
 }
 
@@ -220,7 +220,7 @@ pub fn element_raw_list(s: &[u8]) -> IResult<&[u8], Vec<ElementRaw>> {
 ///     }
 /// );
 /// ```
-pub fn element_list(s: &[u8]) -> Result<Vec<Element>, XfccError> {
+pub fn element_list(s: &[u8]) -> Result<Vec<Element<'_>>, XfccError<'_>> {
     let (trailing, raw_list) = element_raw_list(s)?;
 
     if !trailing.is_empty() {
