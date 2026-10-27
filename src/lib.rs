@@ -157,8 +157,11 @@ fn pair_key(s: &[u8]) -> IResult<&[u8], PairKey> {
 }
 
 fn pair(s: &[u8]) -> IResult<&[u8], (PairKey, Cow<'_, str>)> {
-    let (s, (key, _, value)) =
-        tuple((pair_key, char('='), alt((quoted_value, unquoted_value))))(s)?;
+    let (s, (key, _)) = tuple((pair_key, char('=')))(s)?;
+    let (s, value) = match key {
+        PairKey::Subject => quoted_value(s)?,
+        _ => alt((quoted_value, unquoted_value))(s)?,
+    };
     Ok((s, (key, value)))
 }
 
@@ -380,6 +383,31 @@ mod tests {
     }
 
     #[test]
+    fn quoted_subject_test() {
+        let input = br#"Subject="CN=client""#;
+        assert_eq!(
+            element_raw_list(input),
+            Ok((
+                &[][..],
+                vec![vec![(PairKey::Subject, Cow::from("CN=client")),]]
+            ))
+        );
+        let elements = element_list(input).unwrap();
+        assert_eq!(elements[0].subject.as_deref(), Some("CN=client"));
+    }
+
+    #[test]
+    fn unquoted_subject_stops_raw_parsing() {
+        for invalid_pair in [b"Subject=foo".as_slice()] {
+            assert_eq!(element_raw_list(invalid_pair), Ok((invalid_pair, vec![])));
+            assert_eq!(
+                element_list(invalid_pair),
+                Err(XfccError::TrailingSequence(invalid_pair))
+            );
+        }
+    }
+
+    #[test]
     fn basic_element_test() {
         let input = br#"By=http://frontend.lyft.com;Hash=468ed33be74eee6556d90c0149c1309e9ba61d6425303443c0748a02dd8de688;Subject="/C=US/ST=CA/L=San Francisco/OU=Lyft/CN=Test Client";URI=http://testclient.lyft.com"#;
         assert_eq!(
@@ -554,22 +582,30 @@ mod tests {
 
     #[test]
     fn duplicate_pair_key_test() {
-        let input = br#"By=http://example.com;Hash=hash1;Hash=hash2"#;
-        assert_eq!(
-            element_raw_list(input),
-            Ok((
-                &[][..],
-                vec![vec![
-                    (PairKey::By, Cow::from("http://example.com")),
-                    (PairKey::Hash, Cow::from("hash1")),
-                    (PairKey::Hash, Cow::from("hash2")),
-                ]]
-            ))
-        );
-        assert_eq!(
-            element_list(input),
-            Err(XfccError::DuplicatePairKey(PairKey::Hash))
-        );
+        for key_name in ["Hash", "Cert", "Chain", "Subject"] {
+            let input = format!(
+                r#"By=http://example.com;{}="value1";{}="value2""#,
+                key_name, key_name
+            );
+            let input_bytes = input.as_bytes();
+            assert_eq!(
+                element_raw_list(input_bytes),
+                Ok((
+                    &[][..],
+                    vec![vec![
+                        (PairKey::By, Cow::from("http://example.com")),
+                        (PairKey::from_str(key_name).unwrap(), Cow::from("value1")),
+                        (PairKey::from_str(key_name).unwrap(), Cow::from("value2")),
+                    ]]
+                ))
+            );
+            assert_eq!(
+                element_list(input_bytes),
+                Err(XfccError::DuplicatePairKey(
+                    PairKey::from_str(key_name).unwrap()
+                ))
+            );
+        }
     }
 
     #[test]
