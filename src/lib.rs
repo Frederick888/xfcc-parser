@@ -37,6 +37,8 @@ pub enum PairKey {
     Chain,
     /// The Subject field of the current client certificate
     Subject,
+    /// The Issuer field of the current client certificate
+    Issuer,
     /// The URI type Subject Alternative Name field of the current client certificate
     #[strum(serialize = "URI")]
     Uri,
@@ -56,6 +58,7 @@ pub struct Element<'a> {
     pub cert: Option<Cow<'a, str>>,
     pub chain: Option<Cow<'a, str>>,
     pub subject: Option<Cow<'a, str>>,
+    pub issuer: Option<Cow<'a, str>>,
     pub uri: Vec<Cow<'a, str>>,
     pub dns: Vec<Cow<'a, str>>,
 }
@@ -84,6 +87,7 @@ impl<'a> TryFrom<ElementRaw<'a>> for Element<'a> {
                 PairKey::Cert => error_if_duplicate!(PairKey::Cert, cert),
                 PairKey::Chain => error_if_duplicate!(PairKey::Chain, chain),
                 PairKey::Subject => error_if_duplicate!(PairKey::Subject, subject),
+                PairKey::Issuer => error_if_duplicate!(PairKey::Issuer, issuer),
                 PairKey::Uri => element.uri.push(value),
                 PairKey::Dns => element.dns.push(value),
             }
@@ -144,6 +148,7 @@ fn pair_key(s: &[u8]) -> IResult<&[u8], PairKey> {
             tag("Cert"),
             tag("Chain"),
             tag("Subject"),
+            tag("Issuer"),
             tag("URI"),
             tag("DNS"),
         )),
@@ -159,7 +164,7 @@ fn pair_key(s: &[u8]) -> IResult<&[u8], PairKey> {
 fn pair(s: &[u8]) -> IResult<&[u8], (PairKey, Cow<'_, str>)> {
     let (s, (key, _)) = tuple((pair_key, char('=')))(s)?;
     let (s, value) = match key {
-        PairKey::Subject => quoted_value(s)?,
+        PairKey::Subject | PairKey::Issuer => quoted_value(s)?,
         _ => alt((quoted_value, unquoted_value))(s)?,
     };
     Ok((s, (key, value)))
@@ -218,6 +223,7 @@ pub fn element_raw_list(s: &[u8]) -> IResult<&[u8], Vec<ElementRaw<'_>>> {
 ///         cert: None,
 ///         chain: None,
 ///         subject: Some(Cow::from("/C=US/ST=CA/L=San Francisco/OU=Lyft/CN=Test Client")),
+///         issuer: None,
 ///         uri: vec![Cow::from("http://testclient.lyft.com")],
 ///         dns: vec![],
 ///     }
@@ -398,13 +404,36 @@ mod tests {
 
     #[test]
     fn unquoted_subject_stops_raw_parsing() {
-        for invalid_pair in [b"Subject=foo".as_slice()] {
-            assert_eq!(element_raw_list(invalid_pair), Ok((invalid_pair, vec![])));
-            assert_eq!(
-                element_list(invalid_pair),
-                Err(XfccError::TrailingSequence(invalid_pair))
-            );
-        }
+        let invalid_pair = b"Subject=foo".as_slice();
+        assert_eq!(element_raw_list(invalid_pair), Ok((invalid_pair, vec![])));
+        assert_eq!(
+            element_list(invalid_pair),
+            Err(XfccError::TrailingSequence(invalid_pair))
+        );
+    }
+
+    #[test]
+    fn quoted_issuer_test() {
+        let input = br#"Issuer="CN=authority""#;
+        assert_eq!(
+            element_raw_list(input),
+            Ok((
+                &[][..],
+                vec![vec![(PairKey::Issuer, Cow::from("CN=authority"))]]
+            ))
+        );
+        let elements = element_list(input).unwrap();
+        assert_eq!(elements[0].issuer.as_deref(), Some("CN=authority"));
+    }
+
+    #[test]
+    fn unquoted_issuer_stops_raw_parsing() {
+        let invalid_pair = b"Issuer=bar".as_slice();
+        assert_eq!(element_raw_list(invalid_pair), Ok((invalid_pair, vec![])));
+        assert_eq!(
+            element_list(invalid_pair),
+            Err(XfccError::TrailingSequence(invalid_pair))
+        );
     }
 
     #[test]
@@ -540,6 +569,7 @@ mod tests {
                 subject: Some(Cow::from(
                     "/C=US/ST=CA/L=San Francisco/OU=Lyft/CN=Test Client"
                 )),
+                issuer: None,
                 uri: vec![Cow::from("http://testclient.lyft.com")],
                 dns: vec![],
             }
@@ -555,6 +585,7 @@ mod tests {
                 cert: None,
                 chain: None,
                 subject: None,
+                issuer: None,
                 uri: vec![],
                 dns: vec![],
             }
@@ -574,6 +605,7 @@ mod tests {
                 cert: None,
                 chain: None,
                 subject: None,
+                issuer: None,
                 uri: vec![],
                 dns: vec![],
             }
@@ -582,7 +614,7 @@ mod tests {
 
     #[test]
     fn duplicate_pair_key_test() {
-        for key_name in ["Hash", "Cert", "Chain", "Subject"] {
+        for key_name in ["Hash", "Cert", "Chain", "Subject", "Issuer"] {
             let input = format!(
                 r#"By=http://example.com;{}="value1";{}="value2""#,
                 key_name, key_name
