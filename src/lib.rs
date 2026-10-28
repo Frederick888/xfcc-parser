@@ -9,7 +9,7 @@ use std::{
 pub use error::XfccError;
 use nom::{
     branch::alt,
-    bytes::complete::{escaped_transform, is_not, tag, take, take_till},
+    bytes::complete::{escaped_transform, is_not, tag, tag_no_case, take, take_till},
     character::complete::char,
     combinator::{eof, map, map_res, value},
     multi::{separated_list0, separated_list1},
@@ -26,6 +26,7 @@ const EQUAL: u8 = b'=';
 
 /// Variants of pair keys in XFCC elements
 #[derive(Debug, PartialEq, Eq, EnumString, strum::Display)]
+#[strum(ascii_case_insensitive)]
 pub enum PairKey {
     /// The Subject Alternative Name (URI type) of the current proxy's certificate
     By,
@@ -143,14 +144,14 @@ fn unquoted_value(s: &[u8]) -> IResult<&[u8], Cow<'_, str>> {
 fn pair_key(s: &[u8]) -> IResult<&[u8], PairKey> {
     map_res(
         alt((
-            tag("By"),
-            tag("Hash"),
-            tag("Cert"),
-            tag("Chain"),
-            tag("Subject"),
-            tag("Issuer"),
-            tag("URI"),
-            tag("DNS"),
+            tag_no_case("By"),
+            tag_no_case("Hash"),
+            tag_no_case("Cert"),
+            tag_no_case("Chain"),
+            tag_no_case("Subject"),
+            tag_no_case("Issuer"),
+            tag_no_case("URI"),
+            tag_no_case("DNS"),
         )),
         |name| {
             to_cow_str(name).map(|name| match PairKey::from_str(name.borrow()) {
@@ -458,6 +459,24 @@ mod tests {
                     (PairKey::Uri, Cow::from("http://testclient.lyft.com"))
                 ])
             ))
+        );
+    }
+
+    #[test]
+    fn mixed_case_element_test() {
+        let input = br#"bY=Proxy;hAsH=AbCd;cErT=Cert;cHaIn=Chain;sUbJeCt="CN=Client";uRi=spiffe://Mesh/Client;dNs=Example.COM;issuer="Me""#;
+        assert_eq!(
+            element_list(input),
+            Ok(vec![Element {
+                by: vec![Cow::from("Proxy")],
+                hash: Some(Cow::from("AbCd")),
+                cert: Some(Cow::from("Cert")),
+                chain: Some(Cow::from("Chain")),
+                subject: Some(Cow::from("CN=Client")),
+                issuer: Some(Cow::from("Me")),
+                uri: vec![Cow::from("spiffe://Mesh/Client")],
+                dns: vec![Cow::from("Example.COM")],
+            }])
         );
     }
 
