@@ -1,3 +1,18 @@
+<a name="v0.2.0"></a>
+## v0.2.0 (2026-10-28)
+
+
+#### Features
+
+*   Support double-quoted Issuer values ([5a964d60](https://github.com/Frederick888/xfcc-parser/commit/5a964d601d3befe3b2a71ab8c71f8b09e5c5169a))
+
+#### Bug Fixes
+
+*   Parse keys case insensitively (#8) ([109c84db](https://github.com/Frederick888/xfcc-parser/commit/109c84db7ed544a3b1af4c65597b07b3a2132367))
+*   Enforce double-quoted Subject values ([c7e6b5b5](https://github.com/Frederick888/xfcc-parser/commit/c7e6b5b525c47dbe9d105f00ed44d4e6bbb71082))
+
+
+
 <a name="v0.1.2"></a>
 ## v0.1.2 (2023-06-28)
 
