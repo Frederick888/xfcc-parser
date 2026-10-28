@@ -13,8 +13,8 @@ use nom::{
     character::complete::char,
     combinator::{eof, map, map_res, value},
     multi::{separated_list0, separated_list1},
-    sequence::{delimited, tuple},
-    AsChar, IResult,
+    sequence::delimited,
+    AsChar, IResult, Parser,
 };
 use strum::EnumString;
 
@@ -106,7 +106,7 @@ fn to_owned_cow_str(s: Vec<u8>) -> Result<Cow<'static, str>, FromUtf8Error> {
 }
 
 fn empty_quoted_value(s: &[u8]) -> IResult<&[u8], Cow<'_, str>> {
-    map(value("", tag([DOUBLE_QUOTE, DOUBLE_QUOTE])), Cow::from)(s)
+    map(value("", tag(&[DOUBLE_QUOTE, DOUBLE_QUOTE][..])), Cow::from).parse(s)
 }
 
 fn escaped_value(s: &[u8]) -> IResult<&[u8], Cow<'_, str>> {
@@ -117,7 +117,8 @@ fn escaped_value(s: &[u8]) -> IResult<&[u8], Cow<'_, str>> {
             take(1u8),
         ),
         to_owned_cow_str,
-    )(s)
+    )
+    .parse(s)
 }
 
 fn quoted_value(s: &[u8]) -> IResult<&[u8], Cow<'_, str>> {
@@ -128,7 +129,8 @@ fn quoted_value(s: &[u8]) -> IResult<&[u8], Cow<'_, str>> {
             escaped_value,
             char(DOUBLE_QUOTE.as_char()),
         ),
-    ))(s)
+    ))
+    .parse(s)
 }
 
 fn unquoted_value(s: &[u8]) -> IResult<&[u8], Cow<'_, str>> {
@@ -138,7 +140,8 @@ fn unquoted_value(s: &[u8]) -> IResult<&[u8], Cow<'_, str>> {
             eof,
         )),
         to_cow_str,
-    )(s)
+    )
+    .parse(s)
 }
 
 fn pair_key(s: &[u8]) -> IResult<&[u8], PairKey> {
@@ -159,20 +162,21 @@ fn pair_key(s: &[u8]) -> IResult<&[u8], PairKey> {
                 Err(_) => unreachable!("Failed to parse PairKey while nom succeeded"),
             })
         },
-    )(s)
+    )
+    .parse(s)
 }
 
 fn pair(s: &[u8]) -> IResult<&[u8], (PairKey, Cow<'_, str>)> {
-    let (s, (key, _)) = tuple((pair_key, char('=')))(s)?;
+    let (s, (key, _)) = (pair_key, char('=')).parse(s)?;
     let (s, value) = match key {
         PairKey::Subject | PairKey::Issuer => quoted_value(s)?,
-        _ => alt((quoted_value, unquoted_value))(s)?,
+        _ => alt((quoted_value, unquoted_value)).parse(s)?,
     };
     Ok((s, (key, value)))
 }
 
 fn element(s: &[u8]) -> IResult<&[u8], ElementRaw<'_>> {
-    separated_list1(char(';'), pair)(s)
+    separated_list1(char(';'), pair).parse(s)
 }
 
 /// Parses an XFCC header to a list of raw XFCC elements, each consists of a list of key-value pairs
@@ -198,7 +202,7 @@ fn element(s: &[u8]) -> IResult<&[u8], ElementRaw<'_>> {
 /// ]);
 /// ```
 pub fn element_raw_list(s: &[u8]) -> IResult<&[u8], Vec<ElementRaw<'_>>> {
-    separated_list0(char(','), element)(s)
+    separated_list0(char(','), element).parse(s)
 }
 
 /// Parses an XFCC header to a list of XFCC elements
