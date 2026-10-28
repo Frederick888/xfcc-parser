@@ -134,7 +134,7 @@ fn quoted_value(s: &[u8]) -> IResult<&[u8], Cow<'_, str>> {
 fn unquoted_value(s: &[u8]) -> IResult<&[u8], Cow<'_, str>> {
     map_res(
         alt((
-            take_till(|c| c == COMMA || c == SEMICOLON || c == EQUAL),
+            take_till(|c| c == COMMA || c == SEMICOLON || c == EQUAL || c == DOUBLE_QUOTE),
             eof,
         )),
         to_cow_str,
@@ -387,6 +387,40 @@ mod tests {
             (&[][..], (PairKey::Chain, Cow::from("hello! world!")))
         );
         assert!(matches!(parsed.1 .1, Cow::Owned(_)));
+    }
+
+    #[test]
+    fn element_list_rejects_unterminated_quoted_value_test() {
+        let input = br#"URI="spiffe://example.com/client"#;
+        let trailing: &[u8] = br#""spiffe://example.com/client"#;
+        assert_eq!(
+            element_list(input),
+            Err(XfccError::TrailingSequence(trailing))
+        );
+        assert_eq!(
+            element_raw_list(input),
+            Ok((trailing, vec![vec![(PairKey::Uri, Cow::from(""))]]))
+        );
+    }
+
+    #[test]
+    fn element_list_rejects_unquoted_value_ending_in_double_quote_test() {
+        let input = br#"URI=spiffe://example.com/client""#;
+        let trailing: &[u8] = br#"""#;
+        assert_eq!(
+            element_list(input),
+            Err(XfccError::TrailingSequence(trailing))
+        );
+        assert_eq!(
+            element_raw_list(input),
+            Ok((
+                trailing,
+                vec![vec![(
+                    PairKey::Uri,
+                    Cow::from("spiffe://example.com/client")
+                )]]
+            ))
+        );
     }
 
     #[test]
