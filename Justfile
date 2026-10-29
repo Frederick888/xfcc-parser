@@ -10,15 +10,14 @@ lint:
     cargo clippy --examples --benches --tests -- -D warnings
 
 release version:
-    set -e
     @if [[ "{{version}}" == v* ]]; then printf 'Must not have v-prefix\n'; exit 1; fi
     # changelog
-    if [[ "{{version}}" != *"-"* ]]; then \
+    if [[ "{{version}}" != *"-"* ]] && ! grep -qsF '<a name="v{{version}}"></a>' ./CHANGELOG.md; then \
         last_tag="$(git tag -l --sort version:refname | grep -v -- - | tail -n1)"; \
         clog --from="$last_tag" --setversion=v{{version}} -o ./CHANGELOG.md; \
         git add ./CHANGELOG.md; \
     fi
-    # host
+    # verify
     sed 's/^version = ".*"$/version = "{{version}}"/' -i ./Cargo.toml
     git add ./Cargo.toml
     just lint

@@ -1,0 +1,100 @@
+name: Changelog
+
+on:
+  workflow_dispatch:
+    inputs:
+      next_version:
+        description: 'Version to release, e.g. 0.3.0'
+        required: true
+        type: string
+      last_version:
+        description: 'Version to list changes since. Detected automatically if empty'
+        required: false
+        type: string
+      dry_run:
+        description: 'Print the new changes instead of committing them'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Resolve Versions
+        id: versions
+        shell: bash
+        env:
+          NEXT_VERSION: ${{ inputs.next_version }}
+          LAST_VERSION: ${{ inputs.last_version }}
+        run: |
+          next_version="${NEXT_VERSION#v}"
+          if [[ -z "$next_version" ]]; then
+            printf 'Next version must not be empty\n'
+            exit 1
+          elif [[ "$next_version" == *"-"* ]]; then
+            printf 'Next version must not be a pre-release\n'
+            exit 1
+          fi
+          if [[ -n "${LAST_VERSION#v}" ]]; then
+            last_tag="v${LAST_VERSION#v}"
+            if ! git rev-parse -q --verify "refs/tags/$last_tag" >/dev/null; then
+              printf 'Tag %s does not exist\n' "$last_tag"
+              exit 1
+            fi
+          else
+            last_tag="$(git tag -l --sort version:refname | grep -v -- - | tail -n1)"
+          fi
+          printf 'Releasing v%s, using %s as last tag\n' "$next_version" "$last_tag"
+          printf 'next_version=%s\n' "$next_version" >> $GITHUB_OUTPUT
+          printf 'last_tag=%s\n' "$last_tag" >> $GITHUB_OUTPUT
+
+      - name: Install clog
+        shell: bash
+        run: |
+          curl -s -L -o/tmp/clog.tar.gz https://github.com/clog-tool/clog-cli/releases/download/v0.9.3/clog-v0.9.3-x86_64-unknown-linux-musl.tar.gz
+          tar -xf /tmp/clog.tar.gz -C /tmp
+          chmod +x /tmp/clog
+
+      - name: Conventional Commit Changelog
+        shell: bash
+        env:
+          NEXT_VERSION: ${{ steps.versions.outputs.next_version }}
+          LAST_TAG: ${{ steps.versions.outputs.last_tag }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if grep -qsF "<a name=\"v$NEXT_VERSION\"></a>" ./CHANGELOG.md; then
+            if [[ "$DRY_RUN" != 'true' ]]; then
+              printf 'v%s is already in CHANGELOG.md\n' "$NEXT_VERSION"
+              exit 1
+            else
+              printf '::warning::v%s is already in CHANGELOG.md\n' "$NEXT_VERSION"
+            fi
+          fi
+          if [[ "$DRY_RUN" == 'true' ]]; then
+            /tmp/clog --from="$LAST_TAG" --setversion="v$NEXT_VERSION"
+          else
+            /tmp/clog --from="$LAST_TAG" --setversion="v$NEXT_VERSION" -o ./CHANGELOG.md
+          fi
+
+      - name: Commit
+        if: ${{ !inputs.dry_run }}
+        shell: bash
+        env:
+          NEXT_VERSION: ${{ steps.versions.outputs.next_version }}
+        run: |
+          git add ./CHANGELOG.md
+          if git diff --cached --quiet; then
+            printf 'Changelog is unchanged\n'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "docs: Update changelog for v$NEXT_VERSION"
+          git push origin "HEAD:$GITHUB_REF_NAME"
